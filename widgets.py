@@ -1,7 +1,9 @@
 import pickle
-from tkinter import Frame, Label, Menu, Button, Checkbutton, IntVar, Scrollbar, Canvas, Entry, Text, StringVar
+from tkinter import Frame, Label, Menu, Button, Checkbutton, IntVar, Scrollbar, Canvas, Entry, Text, StringVar, PanedWindow
 from tkinter.constants import *
 from tkinter.filedialog import asksaveasfile, askopenfile
+from tkinter.messagebox import showwarning
+
 
 class Task(Frame):
     def __init__(self, content, parent=None, key=None, current_task_var=None, font=('Roboto', 14, 'normal')):
@@ -30,20 +32,21 @@ class Task(Frame):
         else:
             self.text.config(font=self.font)
 
-class TaskList(Frame):
+
+class TaskList(PanedWindow):
     def __init__(self, tasks, current_task, parent=None):
-        Frame.__init__(self, parent)
+        PanedWindow.__init__(self, parent)
         self.config(borderwidth=2, relief=GROOVE)
         self.pack(side=LEFT, fill=BOTH, expand=YES)
         Label(self, text='Your task list', font=('Roboto', 16, 'bold')).pack(side=TOP, anchor=CENTER, fill=X)
-        canvas = Canvas(self, width=300, height=300, scrollregion=(0, 0, 300, 300))
+        canvas = Canvas(self, height=300, scrollregion=(0, 0, 300, 300))
         sbar = Scrollbar(self, command=canvas.yview)
         canvas.config(yscrollcommand=sbar.set)
         sbar.pack(side=RIGHT, fill=Y)
         canvas.pack(fill=BOTH, expand=YES)
         self.list_frame = Frame(canvas)
         self.list_frame.pack(fill=BOTH, expand=YES)
-        canvas.create_window(0, 0, anchor=NW, window=self.list_frame, width=300, height=300)
+        canvas.create_window(0, 0, anchor=NW, window=self.list_frame, width=3000, height=300)
         self.tasks = tasks
         self.current_task = current_task
         self.make_tasks()
@@ -65,9 +68,10 @@ class TaskList(Frame):
             self.task_objs[key].destroy()
             del self.task_objs[key]
 
-class TaskContainer(Frame):
+
+class TaskContainer(PanedWindow):
     def __init__(self, tasks, parent=None):
-        Frame.__init__(self, parent)
+        PanedWindow.__init__(self, parent)
         self.pack(fill=BOTH, expand=YES)
         self.tasks = tasks
         self.file = None
@@ -77,6 +81,8 @@ class TaskContainer(Frame):
         self.task_list = TaskList(tasks, self.current_task, parent=self)
         self.task_objs = self.task_list.task_objs
         self.task_manager = TaskManager(tasks, self.task_objs, self)
+        self.add(self.task_list)
+        self.add(self.task_manager)
         self.task_manager.menu.task_adder.button.config(command=lambda: self.add_task())
         self.task_manager.menu.task_clear_or_delete_manager.clearing_button.config(command=lambda: self.clear_tasks())
         self.task_manager.menu.task_clear_or_delete_manager.deleting_button.config(command=lambda: self.delete_task())
@@ -130,6 +136,7 @@ class TaskContainer(Frame):
             self.task_manager.task_info.change_text('')
             self.task_list.check_active_tasks(self.tasks)
 
+
 class TaskAdder(Frame):
     def __init__(self, parent=None):
         Frame.__init__(self, parent)
@@ -143,12 +150,24 @@ class TaskAdder(Frame):
         self.button.pack(side=TOP, anchor=CENTER, fill=X)
 
     def add_task(self, tasks):
-        tasks[max(tasks.keys())+1] = {
-            'preview': self.preview_text.get(),
-            'main': self.text.get('1.0', END+'-1c')
-        }
-        self.entry.delete(0, END)
-        self.text.delete('1.0', END)
+        preview_text = self.preview_text.get()
+        text = self.text.get('1.0', END+'-1c')
+        if(preview_text == '' or text == ''):
+            showwarning('Warning', 'You forgot write task content')
+        else:
+            try:
+                tasks[max(tasks.keys())+1] = {
+                    'preview': preview_text,
+                    'main': text
+                }
+            except ValueError:
+                tasks[1] = {
+                    'preview': self.preview_text.get(),
+                    'main': self.text.get('1.0', END + '-1c')
+                }
+            self.entry.delete(0, END)
+            self.text.delete('1.0', END)
+
 
 class TaskClearOrDeleteManager(Frame):
     def __init__(self, parent=None):
@@ -170,28 +189,37 @@ class TaskClearOrDeleteManager(Frame):
         del task_objs[key]
         del tasks[key]
 
+
 class TaskManagerMenu(Frame):
     def __init__(self, tasks, parent=None):
         Frame.__init__(self, parent)
-        self.pack(side=TOP, anchor=CENTER, fill=X)
+        self.pack(fill=BOTH, expand=YES)
         self.task_adder = TaskAdder(parent=self)
         self.task_clear_or_delete_manager = TaskClearOrDeleteManager(parent=self)
 
+
+class BlockedText(Text):
+    def __init__(self, parent=None, *args, **kwargs):
+        Text.__init__(self, parent, state=DISABLED, *args, **kwargs)
+    def write(self, text):
+        self.config(state=NORMAL)
+        self.delete('1.0', END)
+        self.insert('1.0', text)
+        self.config(state=DISABLED)
 class TaskMainInfo(Frame):
     def __init__(self, task=None, parent=None):
         Frame.__init__(self, parent)
         self.pack(side=TOP, fill=BOTH, expand=YES)
         Label(self, text='Task information', font=('Roboto', 16, 'bold')).pack(side=TOP, anchor=CENTER, fill=X)
-        self.text = Text(self, font=('Roboto', 16, 'normal'))
+        self.text = BlockedText(parent=self, font=('Roboto', 16, 'normal'))
         self.text.pack(side=TOP, anchor=CENTER, expand=YES, fill=BOTH)
     
     def change_text(self, text):
-        self.text.delete('1.0', END)
-        self.text.insert('1.0', text)
+        self.text.write(text)
 
-class TaskManager(Frame):
+class TaskManager(PanedWindow):
     def __init__(self, tasks, task_objs, parent=None):
-        Frame.__init__(self, parent)
+        PanedWindow.__init__(self, parent)
         self.config(borderwidth=2, relief=GROOVE)
         self.pack(side=RIGHT, fill=BOTH, expand=YES)
         Label(self, text='Task manager', font=('Roboto', 16, 'bold')).pack(side=TOP, anchor=N, fill=X)
